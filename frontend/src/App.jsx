@@ -1,4 +1,4 @@
-import { WalletProvider } from './contexts/WalletContext';
+import { WalletProvider } from './contexts/WalletContext.jsx';
 import TransferForm from './components/TransferForm';
 import { Box, Button, Typography } from '@mui/material';
 import { useContext } from 'react';
