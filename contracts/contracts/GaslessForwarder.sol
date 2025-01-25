@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
@@ -14,10 +14,7 @@ contract GaslessForwarder {
         bytes calldata data,
         bytes calldata signature
     ) external {
-        // Verify nonce
         uint256 currentNonce = nonces[user]++;
-        
-        // Create message hash
         bytes32 messageHash = keccak256(
             abi.encodePacked(
                 user,
@@ -27,13 +24,8 @@ contract GaslessForwarder {
                 block.chainid
             )
         );
-        
-        // Verify signature
-        bytes32 ethSignedMessageHash = messageHash.toEthSignedMessageHash();
-        address signer = ethSignedMessageHash.recover(signature);
+        address signer = messageHash.toEthSignedMessageHash().recover(signature);
         require(signer == user, "Invalid signature");
-        
-        // Execute transaction
         (bool success, ) = target.call(data);
         require(success, "Transaction failed");
     }
