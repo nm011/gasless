@@ -1,9 +1,6 @@
 require("dotenv").config();
 const HDWalletProvider = require("@truffle/hdwallet-provider");
 
-const mnemonic = process.env.MNEMONIC;
-const privateKey = process.env.PRIVATE_KEY;
-
 module.exports = {
   networks: {
     sepolia: {
@@ -12,9 +9,11 @@ module.exports = {
         providerOrUrl: `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
       }),
       network_id: 11155111,
-      networkCheckTimeout: 30000, // Increase to 30 seconds
-      timeoutBlocks: 200,
-      from: "0xC93B2170602fAdDDd81df5a1AdE06C24194230c2"
+      timeoutBlocks: 500,
+      from: "0xC93B2170602fAdDDd81df5a1AdE06C24194230c2",
+      gas: 8000000,          // Increased from 6M to 8M
+      gasPrice: 30000000000, // 30 Gwei
+      networkCheckTimeout: 100000
     }
   },
   contracts_directory: "./contracts",
