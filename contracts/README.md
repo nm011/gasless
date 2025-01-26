@@ -3,7 +3,7 @@
 Gasless transactions allow users to interact with blockchain applications without needing to hold native tokens for gas fees. This project implements a gasless transaction forwarder, which allows the users to send ERC-721 transactions without holding ETH. We have tested the environment via multiple transactions on testNFTs (ERC-721).
 
 ### Note 
-The ERC-20 tranasactions are not supported through this contract.
+The ERC-20 transactions are not supported through this contract.
 
 ## Installation
    ```bash
