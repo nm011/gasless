@@ -48,12 +48,7 @@ npx hardhat run scripts/deploy.js --network <network-name>
 ```bash
 npx hardhat verify --network <network-name> <deployed-contract-address>
 ```
-### 5. Example .env file setup
-PRIVATE_KEY=0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
-INFURA_API_KEY=your-infura-api-key
-NETWORK=goerli
-
-### 6. Notes
+### 5. Notes
 Ensure your wallet has sufficient native tokens for gas fees.
 You can test the deployment locally by using the localhost network with Hardhat’s built-in blockchain:
 
