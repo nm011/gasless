@@ -15,7 +15,7 @@ Follow these steps to deploy the gasless transaction forwarder:
 ### Prerequisites
 
 1. Ensure you have the following installed:
-   - [Node.js](https://nodejs.org/) (v14 or higher)
+   - [Node.js](https://nodejs.org/) (v18 or higher)
    - [Hardhat](https://hardhat.org/)
    - A wallet with sufficient native tokens to cover deployment costs.
 
