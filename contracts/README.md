@@ -54,5 +54,5 @@ You can test the deployment locally by using the localhost network with Hardhatâ
 
 ```bash
 npx hardhat node
-npx hardhat run scripts/deploy.js --network localhost
+npx hardhat run scripts/deploy.js --network <network-name>
 ```
