@@ -11,7 +11,7 @@ module.exports = {
       network_id: 11155111,
       timeoutBlocks: 500,
       from: "0xC93B2170602fAdDDd81df5a1AdE06C24194230c2",
-      gas: 8000000,          // Increased from 6M to 8M
+      gas: 4000000,          // Increased from 6M to 8M
       gasPrice: 30000000000, // 30 Gwei
       networkCheckTimeout: 100000
     }
