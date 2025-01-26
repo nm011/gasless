@@ -1,6 +1,9 @@
 # Gasless Transaction Forwarder
 
-Gasless transactions allow users to interact with blockchain applications without needing to hold native tokens for gas fees. This project implements a gasless transaction forwarder
+Gasless transactions allow users to interact with blockchain applications without needing to hold native tokens for gas fees. This project implements a gasless transaction forwarder, which allows the users to send ERC-721 transactions without holding ETH. We have tested the environment via multiple transactions on testNFTs (ERC-721).
+
+### Note 
+The ERC-20 tranasactions are not supported through this contract.
 
 ## Installation
    ```bash
@@ -41,12 +44,12 @@ npx hardhat compile
 ```
 ### 2. Deploy the forwarder contract
 ```bash
-npx hardhat run scripts/deploy.js --network <network-name>
+npx hardhat run scripts/deploy.js --network sepolia
 ```
 ### 3. Copy the Deployed Contract Address
 ### 4. Verify the Contract (Optional)
 ```bash
-npx hardhat verify --network <network-name> <deployed-contract-address>
+npx hardhat verify --network sepolia <deployed-contract-address>
 ```
 ### 5. Notes
 Ensure your wallet has sufficient native tokens for gas fees.
@@ -54,5 +57,10 @@ You can test the deployment locally by using the localhost network with Hardhatâ
 
 ```bash
 npx hardhat node
-npx hardhat run scripts/deploy.js --network <network-name>
+npx hardhat run scripts/deploy.js --network sepolia
 ```
+To run the frontend :
+```bash
+npm run dev
+```
+
