@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const { ethers } = require('ethers');
 const cors = require('cors');
@@ -9,20 +8,15 @@ const app = express();
 
 // Validate environment variables on startup
 const validateEnv = () => {
-  if (!process.env.RELAYER_ADDRESS) {
-    throw new Error('RELAYER_ADDRESS is not defined in .env');
-  }
-  if (!process.env.RELAYER_PK) {
-    throw new Error('RELAYER_PK is not defined in .env');
-  }
-  if (!process.env.PROVIDER_URL) {
-    throw new Error('PROVIDER_URL is not defined in .env');
-  }
+  const required = ['RELAYER_ADDRESS', 'RELAYER_PK', 'PROVIDER_URL'];
+  required.forEach(env => {
+    if (!process.env[env]) throw new Error(`${env} is not defined in .env`);
+  });
 };
 
 // Configuration middleware
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   methods: ['POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 }));
@@ -39,132 +33,114 @@ const relayerContract = new ethers.Contract(
   wallet
 );
 
+// Contract interfaces
+const erc20Interface = new ethers.Interface([
+  "function permit(address,address,uint256,uint256,uint8,bytes32,bytes32)",
+  "function transferFrom(address,address,uint256)"
+]);
+
+const erc721Interface = new ethers.Interface([
+  "function permit(address,uint256,uint256,bytes)",
+  "function safeTransferFrom(address,address,uint256)"
+]);
+
+const decodeCall = (data) => {
+  try {
+    return erc20Interface.parseTransaction({ data }) || 
+           erc721Interface.parseTransaction({ data });
+  } catch {
+    return null;
+  }
+};
+
 // Verify contract connection
 const verifyContract = async () => {
-  try {
-    const code = await provider.getCode(process.env.RELAYER_ADDRESS);
-    if (code === '0x') {
-      throw new Error('Contract not deployed at specified address');
-    }
-    console.log('✅ Verified contract deployment');
-  } catch (error) {
-    console.error('❌ Contract verification failed:', error.message);
-    process.exit(1);
-  }
+  const code = await provider.getCode(process.env.RELAYER_ADDRESS);
+  if (code === '0x') throw new Error('Contract not deployed');
+  console.log('✅ Verified contract deployment');
 };
 
 // Relayer endpoint
 app.post('/relay', async (req, res) => {
-    try {
-      const { request: rawRequest, signature } = req.body;
-      
-      // [1] Log incoming request
-      console.log('\n=== INCOMING REQUEST ===');
-      console.log('Raw Request:', JSON.stringify(rawRequest, (_, v) => 
-        typeof v === 'bigint' ? v.toString() : v
-      ));
-      console.log('Signature:', signature);
-  
-      // [2] Validate and convert numeric fields
-      if (isNaN(rawRequest.nonce) || isNaN(rawRequest.deadline)) {
-        console.error('Invalid nonce/deadline format');
-        return res.status(400).json({ 
-          error: 'Invalid nonce or deadline format' 
-        });
-      }
-  
-      const request = {
-            ...rawRequest,
-            nonce: BigInt(rawRequest.nonce),
-            deadline: BigInt(rawRequest.deadline)
-        };
-        
-        // Convert stringified values back to BigInt
-        request.nonce = BigInt(request.nonce);
-        request.deadline = BigInt(request.deadline);
+  try {
+    const { request: rawRequest, signature } = req.body;
+    
+    // Validate and convert request
+    const request = {
+      ...rawRequest,
+      nonce: BigInt(rawRequest.nonce),
+      deadline: BigInt(rawRequest.deadline)
+    };
 
-      // [3] Log converted values
-      console.log('\n=== PROCESSED REQUEST ===');
-      console.log('User:', request.user);
-      console.log('Target:', request.target);
-      console.log('Nonce:', request.nonce.toString());
-      console.log('Deadline:', request.deadline.toString());
-      console.log('Data:', request.data);
-  
-      // [4] Decode transaction data
-      try {
-        const iface = new ethers.Interface([
-          "function transferFrom(address,address,uint256)",
-          "function safeTransferFrom(address,address,uint256)"
-        ]);
-        const decoded = iface.parseTransaction({ data: request.data });
-        console.log('\n=== DECODED CALL DATA ===');
-        console.log('Function:', decoded.name);
-        console.log('Args:', decoded.args);
-      } catch (decodeError) {
-        console.error('Data decoding failed:', decodeError);
-      }
-  
-      // [5] Check contract state
-      console.log('\n=== CONTRACT STATE ===');
-      const currentNonce = await relayerContract.nonces(request.user);
-      console.log('Current nonce:', currentNonce.toString());
-      console.log('Request nonce:', request.nonce.toString());
-      
-      const currentTime = Math.floor(Date.now() / 1000);
-      console.log('Current timestamp:', currentTime);
-      console.log('Deadline:', request.deadline.toString());
-  
-      // [7] Estimate gas with debug
-      console.log('\n=== GAS ESTIMATION ===');
-      let gasEstimate;
-      try {
-        gasEstimate = await relayerContract.execute.estimateGas(request, signature);
-        console.log('Gas estimate:', gasEstimate.toString());
-      } catch (estimationError) {
-        console.error('Gas estimation failed:', {
-          message: estimationError.message,
-          data: estimationError.data,
-          reason: estimationError.reason
-        });
-        throw estimationError;
-      }
-  
-      // [8] Execute transaction
-      console.log('\n=== TRANSACTION EXECUTION ===');
-      const tx = await relayerContract.execute(request, signature, {
-        gasLimit: gasEstimate * 130n / 100n
-      });
-      console.log('Tx hash:', tx.hash);
-  
-      const receipt = await tx.wait();
-      console.log('Block confirmed:', receipt.blockNumber);
-  
-      res.json({
-        txHash: receipt.hash,
-        gasUsed: receipt.gasUsed.toString(),
-        block: receipt.blockNumber
-      });
-  
-    } catch (error) {
-      console.error('\n=== ERROR DETAILS ===');
-      console.error('Full error:', {
-        message: error.message,
-        code: error.code,
-        data: error.data,
-        reason: error.reason,
-        stack: error.stack
-      });
-      
-      res.status(500).json({
-        error: error.shortMessage || error.message,
-        ...(process.env.NODE_ENV === 'development' && {
-          details: error.reason,
-          stack: error.stack
-        })
-      });
+    // Decode batched calls
+    const calls = ethers.AbiCoder.defaultAbiCoder().decode(
+      ['bytes[]'], 
+      request.data
+    )[0];
+
+    console.log('\n=== DECODED TRANSACTION ===');
+    console.log(`User: ${request.user}`);
+    console.log(`Target: ${request.target}`);
+    console.log(`Calls (${calls.length}):`);
+
+    calls.forEach((callData, i) => {
+      const decoded = decodeCall(callData);
+      console.log(`[${i}] ${decoded?.name || 'Unknown'}`);
+      if (decoded) console.log(`    Args: ${decoded.args.join(', ')}`);
+    });
+
+    // Check contract state
+    const [currentNonce, currentTime] = await Promise.all([
+      relayerContract.nonces(request.user),
+      provider.getBlock('latest').then(b => b.timestamp)
+    ]);
+
+    console.log('\n=== VALIDATION ===');
+    // console.log(`Nonce: ${request.nonce} (Current: ${currentNonce})`);
+    console.log(`Nonce Validation:
+    - Received: ${request.nonce.toString()}
+    - Expected: ${currentNonce.toString()}
+    - Difference: ${request.nonce - currentNonce}`);
+    console.log(`Deadline: ${request.deadline} (Current: ${currentTime})`);
+
+    if (request.nonce !== currentNonce) {
+      throw new Error(`Invalid nonce (expected ${currentNonce})`);
     }
-  });
+
+    if (request.deadline <= currentTime) {
+      throw new Error('Transaction expired');
+    }
+
+    // Execute transaction
+    console.log('\n=== EXECUTION ===');
+    const gasEstimate = await relayerContract.execute.estimateGas(
+      request, 
+      signature
+    );
+
+    const tx = await relayerContract.execute(request, signature, {
+      gasLimit: gasEstimate * 2n // Double gas for batch safety
+    });
+
+    console.log(`Tx submitted: ${tx.hash}`);
+    const receipt = await tx.wait();
+    
+    res.json({
+      txHash: receipt.hash,
+      gasUsed: receipt.gasUsed.toString(),
+      block: receipt.blockNumber
+    });
+
+  } catch (error) {
+    console.error('Relay Error:', error);
+    res.status(500).json({
+      error: error.reason || error.message,
+      ...(process.env.NODE_ENV === 'development' && {
+        details: error.info?.error?.data || error.data
+      })
+    });
+  }
+});
 
 // Startup sequence
 const startServer = async () => {
@@ -174,10 +150,12 @@ const startServer = async () => {
     
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
-      console.log(`\n🚀 Server ready on port ${PORT}`);
-      console.log(`📄 Contract: ${process.env.RELAYER_ADDRESS}`);
-      console.log(`👛 Relayer: ${wallet.address}`);
-      console.log(`⛽ Provider: ${process.env.PROVIDER_URL}\n`);
+      console.log(`
+      🚀 Server ready on port ${PORT}
+      📄 Contract: ${process.env.RELAYER_ADDRESS}
+      👛 Relayer: ${wallet.address}
+      ⛽ Provider: ${process.env.PROVIDER_URL}
+      `);
     });
 
   } catch (error) {

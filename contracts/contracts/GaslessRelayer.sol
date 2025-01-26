@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// GaslessRelayer.sol
 pragma solidity ^0.8.28;
 
 contract GaslessRelayer {
@@ -24,14 +23,15 @@ contract GaslessRelayer {
     ) external {
         require(req.deadline >= block.timestamp, "Expired");
         require(req.nonce == nonces[req.user], "Invalid nonce");
-        nonces[req.user]++;
+        // nonces[req.user]++;
+        nonces[req.user] = req.nonce + 1;
         
         bytes32 digest = _hashTypedData(req);
         address signer = recover(digest, signature);
         require(signer == req.user, "Invalid signature");
 
         // Decode batched calls
-        bytes[] memory calls = abi.decode(req.data, (bytes[]));
+        (bytes[] memory calls) = abi.decode(req.data, (bytes[]));
         
         // Execute all calls in sequence
         for (uint256 i = 0; i < calls.length; i++) {
@@ -90,5 +90,4 @@ contract GaslessRelayer {
     function getTypedDataHash(ForwardRequest calldata req) external view returns (bytes32) {
         return _hashTypedData(req);
     }
-
 }
