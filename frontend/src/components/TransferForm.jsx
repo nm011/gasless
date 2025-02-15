@@ -12,7 +12,6 @@ import { WalletContext } from '../contexts/WalletContext';
 import ConnectButton from './ConnectButton';
 import RelayerABI from '../abis/GaslessRelayer.json';
 
-// ERC-20 ABI with Permit (EIP-2612)
 const ERC20_ABI = [
   "function name() view returns (string)",
   "function decimals() view returns (uint8)",
@@ -22,7 +21,6 @@ const ERC20_ABI = [
   "function permit(address,address,uint256,uint256,uint8,bytes32,bytes32)"
 ];
 
-// ERC-721 ABI with Permit Extension
 const ERC721_ABI = [
   "function name() view returns (string)",
   "function ownerOf(uint256) view returns (address)",
@@ -56,7 +54,6 @@ const TransferForm = () => {
       let permitData, transferData;
 
       if (formData.isERC721) {
-        // ERC-721 Transfer with Permit
         const tokenContract = new ethers.Contract(
           formData.tokenAddress,
           ERC721_ABI,
@@ -66,7 +63,6 @@ const TransferForm = () => {
         const tokenId = formData.amount;
         const deadline = Math.floor(Date.now() / 1000) + 1800;
 
-        // Get token metadata with fallbacks
         let tokenName;
         try {
           tokenName = await tokenContract.name();
@@ -74,11 +70,9 @@ const TransferForm = () => {
           tokenName = "ERC721 Token";
         }
 
-        // Get token nonce
         const nonce = await tokenContract.nonces(tokenId);
         
 
-        // EIP-712 Domain
         const domain = {
           name: tokenName,
           version: "1",
@@ -86,7 +80,6 @@ const TransferForm = () => {
           verifyingContract: formData.tokenAddress
         };
 
-        // Permit types
         const types = {
           Permit: [
             { name: "spender", type: "address" },
@@ -96,7 +89,6 @@ const TransferForm = () => {
           ]
         };
 
-        // Sign permit
         const permitSignature = await signer.signTypedData(domain, types, {
           spender: import.meta.env.VITE_RELAYER_ADDRESS,
           tokenId,
@@ -104,7 +96,7 @@ const TransferForm = () => {
           deadline
         });
 
-        // Encode calls
+        // encode calls
         permitData = tokenContract.interface.encodeFunctionData("permit", [
           import.meta.env.VITE_RELAYER_ADDRESS,
           tokenId,
@@ -126,20 +118,19 @@ const TransferForm = () => {
           signer
         );
 
-        // Validate permit support
         try {
           await tokenContract.nonces(userAddress);
         } catch {
           throw new Error("Token does not support permit functionality");
         }
 
-        // Get token decimals
         const decimals = await tokenContract.decimals();
         const amount = ethers.parseUnits(formData.amount, decimals);
         const nonce = await tokenContract.nonces(userAddress);
         const deadline = Math.floor(Date.now() / 1000) + 1800;
 
-        // EIP-712 Domain
+        console.log("Amount = ", amount);
+        console.log("tokenContract.name() = ", tokenContract.name());
         const domain = {
           name: await tokenContract.name(),
           version: "2",
@@ -147,7 +138,7 @@ const TransferForm = () => {
           verifyingContract: formData.tokenAddress
         };
 
-        // Permit types
+        // permit types
         const types = {
           Permit: [
             { name: "owner", type: "address" },
@@ -157,8 +148,16 @@ const TransferForm = () => {
             { name: "deadline", type: "uint256" }
           ]
         };
+        // const types = {
+        //   Permit: [
+        //     { name: "holder", type: "address" },
+        //     { name: "spender", type: "address" },
+        //     { name: "nonce", type: "uint256" },
+        //     { name: "expiry", type: "uint256" },
+        //     { name: "allowed", type: "bool" }
+        //   ]
+        // };
 
-        // Sign permit
         const permitSignature = await signer.signTypedData(domain, types, {
           owner: userAddress,
           spender: import.meta.env.VITE_RELAYER_ADDRESS,
@@ -166,11 +165,19 @@ const TransferForm = () => {
           nonce,
           deadline
         });
+        // const permitSignature = {
+        //   holder: userAddress,
+        //   spender: import.meta.env.VITE_RELAYER_ADDRESS,
+        //   nonce,
+        //   expiry: deadline,
+        //   allowed: true
+        // };
 
-        // Split signature
+        // split signature
         const { v, r, s } = splitSignature(permitSignature);
 
-        // Encode calls
+        console.log("v = ", v, "\n r = ", r, "\n s = ", s)
+
         permitData = tokenContract.interface.encodeFunctionData("permit", [
           userAddress,
           import.meta.env.VITE_RELAYER_ADDRESS,
@@ -181,6 +188,18 @@ const TransferForm = () => {
           s
         ]);
 
+        // permitData = tokenContract.interface.encodeFunctionData("permit", [
+        //   userAddress,
+        //   import.meta.env.VITE_RELAYER_ADDRESS,
+        //   nonce,
+        //   deadline,
+        //   true,  // allowed
+        //   v,
+        //   r,
+        //   s
+        // ]);
+        
+
         transferData = tokenContract.interface.encodeFunctionData("transferFrom", [
           userAddress,
           formData.recipient,
@@ -188,14 +207,12 @@ const TransferForm = () => {
         ]);
       }
 
-      // Prepare batched call
       const calls = [permitData, transferData];
       const encodedData = ethers.AbiCoder.defaultAbiCoder().encode(
         ["bytes[]"],
         [calls]
       );
 
-      // Prepare forward request
       const relayerContract = new ethers.Contract(
         import.meta.env.VITE_RELAYER_ADDRESS,
         RelayerABI.abi,
@@ -215,7 +232,7 @@ const TransferForm = () => {
         deadline: deadline.toString()
       };
 
-      // Sign forward request
+      // sign forward request
       const signature = await signer.signTypedData(
         {
           name: "GaslessRelayer",
@@ -235,7 +252,7 @@ const TransferForm = () => {
         request
       );
 
-      // Relay transaction
+      // relay transaction
       const response = await fetch(import.meta.env.VITE_RELAYER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
