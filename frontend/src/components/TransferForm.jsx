@@ -41,10 +41,8 @@ const TransferForm = () => {
   });
 
   const splitSignature = (signature) => {
-    const r = signature.slice(0, 66);
-    const s = '0x' + signature.slice(66, 130);
-    const v = parseInt(signature.slice(130, 132), 16);
-    return { r, s, v: v < 27 ? v + 27 : v };
+    const sig = ethers.Signature.from(signature);
+    return { v: sig.v, r: sig.r, s: sig.s };
   };
 
   const handleSubmit = async (e) => {
@@ -144,7 +142,7 @@ const TransferForm = () => {
         // EIP-712 Domain
         const domain = {
           name: await tokenContract.name(),
-          version: "1",
+          version: "2",
           chainId: (await provider.getNetwork()).chainId,
           verifyingContract: formData.tokenAddress
         };
