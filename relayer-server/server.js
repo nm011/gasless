@@ -6,7 +6,6 @@ const RelayerABI = require('../frontend/src/abis/GaslessRelayer.json');
 
 const app = express();
 
-// Validate environment variables on startup
 const validateEnv = () => {
   const required = ['RELAYER_ADDRESS', 'RELAYER_PK', 'PROVIDER_URL'];
   required.forEach(env => {
@@ -14,7 +13,6 @@ const validateEnv = () => {
   });
 };
 
-// Configuration middleware
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   methods: ['POST', 'OPTIONS'],
@@ -24,7 +22,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize provider and wallet once
+// initialize provider and wallet once
 const provider = new ethers.JsonRpcProvider(process.env.PROVIDER_URL);
 const wallet = new ethers.Wallet(process.env.RELAYER_PK, provider);
 const relayerContract = new ethers.Contract(
@@ -33,10 +31,9 @@ const relayerContract = new ethers.Contract(
   wallet
 );
 
-// Contract interfaces
 const erc20Interface = new ethers.Interface([
   "function permit(address,address,uint256,uint256,uint8,bytes32,bytes32)",
-  "function transferFrom(address,address,uint256)"
+  "function transferFrom(address,address,uint256) returns (bool)"
 ]);
 
 const erc721Interface = new ethers.Interface([
@@ -53,26 +50,26 @@ const decodeCall = (data) => {
   }
 };
 
-// Verify contract connection
+// verify contract connection
 const verifyContract = async () => {
   const code = await provider.getCode(process.env.RELAYER_ADDRESS);
   if (code === '0x') throw new Error('Contract not deployed');
   console.log('✅ Verified contract deployment');
 };
 
-// Relayer endpoint
 app.post('/relay', async (req, res) => {
   try {
     const { request: rawRequest, signature } = req.body;
+
+    console.log(signature);
     
-    // Validate and convert request
     const request = {
       ...rawRequest,
       nonce: BigInt(rawRequest.nonce),
       deadline: BigInt(rawRequest.deadline)
     };
 
-    // Decode batched calls
+    // decode batched calls
     const calls = ethers.AbiCoder.defaultAbiCoder().decode(
       ['bytes[]'], 
       request.data
@@ -89,7 +86,6 @@ app.post('/relay', async (req, res) => {
       if (decoded) console.log(`    Args: ${decoded.args.join(', ')}`);
     });
 
-    // Check contract state
     const [currentNonce, currentTime] = await Promise.all([
       relayerContract.nonces(request.user),
       provider.getBlock('latest').then(b => b.timestamp)
@@ -111,7 +107,7 @@ app.post('/relay', async (req, res) => {
       throw new Error('Transaction expired');
     }
 
-    // Execute transaction
+    // execute transaction
     console.log('\n=== EXECUTION ===');
     const gasEstimate = await relayerContract.execute.estimateGas(
       request, 
@@ -120,6 +116,7 @@ app.post('/relay', async (req, res) => {
 
     const tx = await relayerContract.execute(request, signature, {
       gasLimit: gasEstimate * 2n // Double gas for batch safety
+      // gasLimit: 6755000
     });
 
     console.log(`Tx submitted: ${tx.hash}`);
@@ -142,7 +139,6 @@ app.post('/relay', async (req, res) => {
   }
 });
 
-// Startup sequence
 const startServer = async () => {
   try {
     validateEnv();
