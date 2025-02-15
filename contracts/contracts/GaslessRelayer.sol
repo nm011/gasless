@@ -13,7 +13,12 @@ contract GaslessRelayer {
     bytes32 private immutable _TYPEHASH = 
         keccak256("ForwardRequest(address user,address target,bytes data,uint256 nonce,uint256 deadline)");
     
-    mapping(address => uint256) public nonces;
+    mapping(address => uint256) private nonces;
+
+    bytes4 private constant ERC20_PERMIT_SELECTOR = bytes4(keccak256("permit(address,address,uint256,uint256,uint8,bytes32,bytes32)"));
+    bytes4 private constant ERC721_PERMIT_SELECTOR = bytes4(keccak256("permit(address,uint256,uint256,bytes)"));
+    bytes4 private constant ERC20_TRANSFERFROM_SELECTOR = bytes4(keccak256("transferFrom(address,address,uint256)"));
+    bytes4 private constant ERC721_SAFE_TRANSFERFROM_SELECTOR = bytes4(keccak256("safeTransferFrom(address,address,uint256)"));
 
     constructor() {}
 
@@ -23,7 +28,6 @@ contract GaslessRelayer {
     ) external {
         require(req.deadline >= block.timestamp, "Expired");
         require(req.nonce == nonces[req.user], "Invalid nonce");
-        // nonces[req.user]++;
         nonces[req.user] = req.nonce + 1;
         
         bytes32 digest = _hashTypedData(req);
@@ -32,12 +36,43 @@ contract GaslessRelayer {
 
         // Decode batched calls
         (bytes[] memory calls) = abi.decode(req.data, (bytes[]));
-        
-        // Execute all calls in sequence
-        for (uint256 i = 0; i < calls.length; i++) {
-            (bool success, ) = req.target.call(calls[i]);
-            require(success, "Call failed");
+        require(calls.length == 2, "Invalid calls length");
+
+        // Validate function selectors
+        require(_isValidPermitSelector(calls[0]), "Invalid permit call");
+        require(_isValidTransferSelector(calls[1]), "Invalid transfer call");
+
+        // Execute permit
+        (bool success, bytes memory returnData) = req.target.call(calls[0]);
+        require(success, _getRevertMsg(returnData));
+
+        // Execute transfer
+        (success, returnData) = req.target.call(calls[1]);
+        require(success, _getRevertMsg(returnData));
+    }
+
+    function _isValidPermitSelector(bytes memory callData) private pure returns (bool) {
+        bytes4 selector = _extractSelector(callData);
+        return selector == ERC20_PERMIT_SELECTOR || selector == ERC721_PERMIT_SELECTOR;
+    }
+
+    function _isValidTransferSelector(bytes memory callData) private pure returns (bool) {
+        bytes4 selector = _extractSelector(callData);
+        return selector == ERC20_TRANSFERFROM_SELECTOR || selector == ERC721_SAFE_TRANSFERFROM_SELECTOR;
+    }
+
+    function _extractSelector(bytes memory data) private pure returns (bytes4 selector) {
+        assembly {
+            selector := mload(add(data, 0x20))
         }
+    }
+
+    function _getRevertMsg(bytes memory returnData) internal pure returns (string memory) {
+        if (returnData.length < 68) return "Call failed without revert message";
+        assembly {
+            returnData := add(returnData, 0x04)
+        }
+        return abi.decode(returnData, (string));
     }
 
     function _hashTypedData(ForwardRequest calldata req) private view returns (bytes32) {
